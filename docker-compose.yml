@@ -11,9 +11,11 @@ services:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
 
+      # Redirige HTTP a HTTPS
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
 
+      # Certificados SSL con Let's Encrypt
       - "--certificatesresolvers.letsencrypt.acme.email=jair_semblantes01@hotmail.com"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
@@ -43,18 +45,21 @@ services:
     labels:
       - "traefik.enable=true"
 
+      # Backend NestJS
       - "traefik.http.routers.backend.rule=Host(`api.yosoychair.online`)"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
 
+      # Puerto interno donde corre NestJS dentro del contenedor
       - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_INTERNAL_PORT:-4001}"
 
   frontend:
     build:
-      context: ../frontend
+      context: ../app
       dockerfile: Dockerfile
       args:
         VITE_BACKEND_URL: "https://api.yosoychair.online"
+        VITE_SOCKET_URL: "https://api.yosoychair.online"
     restart: unless-stopped
     depends_on:
       - backend
@@ -63,10 +68,12 @@ services:
     labels:
       - "traefik.enable=true"
 
+      # Frontend React/Vite
       - "traefik.http.routers.frontend.rule=Host(`yosoychair.online`) || Host(`www.yosoychair.online`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
 
+      # Puerto interno donde corre el frontend dentro del contenedor
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
 volumes:
