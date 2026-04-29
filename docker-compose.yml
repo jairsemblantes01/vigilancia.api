@@ -1,28 +1,77 @@
-# Uso (desde esta carpeta): docker compose up --build
-# Variables: copia .env.example a .env y ajusta.
-
 name: vigilancia
 
 services:
+  traefik:
+    image: traefik:v3.1
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+      - "--certificatesresolvers.letsencrypt.acme.email=TU_CORREO@gmail.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "traefik-certificates:/letsencrypt"
+
+    networks:
+      - proxy
+
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    ports:
-      - "${BACKEND_PORT:-4001}:${BACKEND_INTERNAL_PORT:-4001}"
     environment:
       NODE_ENV: production
       PORT: "${BACKEND_INTERNAL_PORT:-4001}"
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+
+      - "traefik.http.routers.backend.rule=Host(`api.yosoychair.online`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+
+      - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_INTERNAL_PORT:-4001}"
 
   frontend:
     build:
       context: ../frontend
       dockerfile: Dockerfile
       args:
-        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:4001}
+        VITE_BACKEND_URL: "https://api.yosoychair.online"
     restart: unless-stopped
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       - backend
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+
+      - "traefik.http.routers.frontend.rule=Host(`yosoychair.online`) || Host(`www.yosoychair.online`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+
+volumes:
+  traefik-certificates:
+
+networks:
+  proxy:
+    driver: bridge
