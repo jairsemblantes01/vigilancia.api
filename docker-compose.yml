@@ -1,0 +1,28 @@
+# Uso (desde esta carpeta): docker compose up --build
+# Variables: copia .env.example a .env y ajusta.
+
+name: vigilancia
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-4001}:${BACKEND_INTERNAL_PORT:-4001}"
+    environment:
+      NODE_ENV: production
+      PORT: "${BACKEND_INTERNAL_PORT:-4001}"
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:4001}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
