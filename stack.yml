@@ -1,0 +1,51 @@
+# Despliegue con Docker Swarm (usa la red "proxy" del stack de infra
+# compartido: /root/infra/docker-stack.yml). Traefik y Mongo NO viven aquí.
+#
+# Build de imágenes (swarm no soporta `build:`, hay que construir antes):
+#   docker build -t vigilancia-backend:latest -f api/Dockerfile api
+#   docker build -t vigilancia-frontend:latest \
+#     --build-arg VITE_BACKEND_URL=https://api.yosoychair.online \
+#     --build-arg VITE_SOCKET_URL=https://api.yosoychair.online \
+#     -f app/Dockerfile app
+#
+# Deploy:
+#   docker stack deploy -c /root/vigilancia/api/stack.yml vigilancia
+
+services:
+  backend:
+    image: vigilancia-backend:latest
+    environment:
+      NODE_ENV: production
+      PORT: "${BACKEND_INTERNAL_PORT:-4001}"
+    networks:
+      - proxy
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.backend.rule=Host(`api.yosoychair.online`)"
+        - "traefik.http.routers.backend.entrypoints=websecure"
+        - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+        - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_INTERNAL_PORT:-4001}"
+
+  frontend:
+    image: vigilancia-frontend:latest
+    networks:
+      - proxy
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.frontend.rule=Host(`app.yosoychair.online`)"
+        - "traefik.http.routers.frontend.entrypoints=websecure"
+        - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+        - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+
+networks:
+  proxy:
+    external: true
+    name: infra_proxy
